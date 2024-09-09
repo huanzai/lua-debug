@@ -22,7 +22,7 @@
             "command": "luamake",
             "args": [
                 "lua",
-                "compile/clang-format.lua",
+                "compile/clang-format.lua"
             ]
         },
         {
@@ -45,7 +45,8 @@
                 "publish",
                 "publish",
                 "${command:extensionPath}"
-            ]
+            ],
+            "problemMatcher": []
         }
     ]
 }

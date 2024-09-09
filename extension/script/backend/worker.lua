@@ -27,6 +27,7 @@ local outputCapture = {}
 local noDebug = false
 local autoUpdate = true
 local coroutineTree = {}
+local coroutinePool = {} -- 收集创建 coroutine
 local stackFrame = {}
 local skipFrame = 0
 local baseL
@@ -816,6 +817,20 @@ function event.thread(co, type)
         end
     end
     hookmgr.updatehookmask(L)
+end
+
+function event.thread_created(co)
+    coroutinePool[co] = true
+end
+
+function event.update_thread_hook()
+    for co in pairs(coroutinePool) do 
+        if "dead" == coroutine.status(co) then 
+            coroutinePool[co] = nil
+        else
+            hookmgr.upatethreadhook(co)
+        end
+    end
 end
 
 function event.wait()

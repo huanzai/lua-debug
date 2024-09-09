@@ -228,8 +228,14 @@ function dbg:setup_patch()
             , ...)
     end
 
+    local rawcoroutinecreate = coroutine.create
     local rawcoroutineresume = coroutine.resume
     local rawcoroutinewrap   = coroutine.wrap
+    function coroutine.create(f)
+        local co = rawcoroutinecreate(f)
+        self:event("thread_created", co)
+        return co
+    end
     local function coreturn(co, ...)
         self:event("thread", co, 1)
         return ...
@@ -243,6 +249,7 @@ function dbg:setup_patch()
         local wf = rawcoroutinewrap(f)
         local _, co = debug.getupvalue(wf, 1)
         return function(...)
+            self:event("thread_created", co)
             self:event("thread", co, 0)
             return coreturn(co, wf(...))
         end
