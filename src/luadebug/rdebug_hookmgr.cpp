@@ -515,7 +515,7 @@ struct hookmgr {
         push_callback(L);
         luadebug::debughost::set(L, hL);
         luadbg_pushstring(L, "update_thread_hook");
-        if (luadbg_pcall(L, 2, 0, 0) != LUADBG_OK) {
+        if (luadbg_pcall(L, 1, 0, 0) != LUADBG_OK) {
             luadbg_pop(L, 1);
             return;
         }
@@ -718,6 +718,13 @@ static int set_thread_hook(luadbg_State* L) {
     return 0;
 }
 
+static int tothread(luadbg_State* L) {
+    luadbgL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+    luadbg_State* thread = (luadbg_State*)luadbg_touserdata(L, 1);
+    luadbg_pushthread(thread);
+    return 1;
+}
+
 #if defined(LUA_HOOKEXCEPTION)
 static int exception_open(luadbg_State* L) {
     hookmgr::get_self(L)->exception_open(luadebug::debughost::get(L), luadbg_toboolean(L, 1));
@@ -777,6 +784,7 @@ int luaopen_luadebug_hookmgr(luadbg_State* L) {
         { "step_cancel", step_cancel },
         { "update_open", update_open },
         { "set_thread_hook", set_thread_hook },
+        { "tothread", tothread },
 #if defined(LUA_HOOKEXCEPTION)
         { "exception_open", exception_open },
 #endif

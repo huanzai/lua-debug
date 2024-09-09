@@ -819,7 +819,8 @@ function event.thread(co, type)
     hookmgr.updatehookmask(L)
 end
 
-function event.thread_created(co)
+function event.thread_created(ud)
+    local co = hookmgr.tothread(ud)
     coroutinePool[co] = true
 end
 
@@ -828,7 +829,7 @@ function event.update_thread_hook()
         if "dead" == coroutine.status(co) then 
             coroutinePool[co] = nil
         else
-            hookmgr.upatethreadhook(co)
+            hookmgr.set_thread_hook(co)
         end
     end
 end
