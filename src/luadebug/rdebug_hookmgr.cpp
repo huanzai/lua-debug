@@ -72,6 +72,7 @@ static void push_callback(luadbg_State* L) {
 namespace luadebug::visitor {
     int copy_to_dbg_ref(lua_State* hL, luadbg_State* L);
     void registry_unref(lua_State* hL, int ref);
+    bool copy_from_dbg_unprotected(luadbg_State* L, lua_State* hL, int idx, int type);
 }
 
 #define LOG(...)                         \
@@ -713,16 +714,15 @@ static int update_open(luadbg_State* L) {
 }
 
 static int set_thread_hook(luadbg_State* L) {
-    luadbgL_checktype(L, 1, LUA_TLIGHTUSERDATA);
-    hookmgr::get_self(L)->set_thread_hook((lua_State*)luadbg_touserdata(L, 1));
-    return 0;
-}
+    lua_State* hL = luadebug::debughost::get(L);
+    if (!luadebug::visitor::copy_from_dbg_unprotected(L, hL, 1, LUADBG_TTHREAD)) {
+        return 0;
+    }
 
-static int tothread(luadbg_State* L) {
-    luadbgL_checktype(L, 1, LUA_TLIGHTUSERDATA);
-    luadbg_State* thread = (luadbg_State*)luadbg_touserdata(L, 1);
-    luadbg_pushthread(thread);
-    return 1;
+    lua_State* thread = lua_tothread(hL, -1);
+    hookmgr::get_self(L)->set_thread_hook(thread);
+    lua_pop(hL, 1);
+    return 0;
 }
 
 #if defined(LUA_HOOKEXCEPTION)
@@ -784,7 +784,6 @@ int luaopen_luadebug_hookmgr(luadbg_State* L) {
         { "step_cancel", step_cancel },
         { "update_open", update_open },
         { "set_thread_hook", set_thread_hook },
-        { "tothread", tothread },
 #if defined(LUA_HOOKEXCEPTION)
         { "exception_open", exception_open },
 #endif

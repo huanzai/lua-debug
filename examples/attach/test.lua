@@ -29,6 +29,8 @@ function do_something()
     count = count + 1
     if 10 == count then 
         wait(true) -- 等待
+    end
+    if count % 10 == 0 then
         print("start load test1.lua")
         local test1 = require "test1"
         local ret = test1()

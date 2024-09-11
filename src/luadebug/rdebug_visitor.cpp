@@ -75,8 +75,9 @@ namespace luadebug::visitor {
         return t;
     }
 
-    static int copy_from_dbg(luadbg_State* L, lua_State* hL, protected_area& area, int idx) {
-        area.check_client_stack(1);
+    static int copy_from_dbg(luadbg_State* L, lua_State* hL, protected_area* area, int idx) {
+        if (area != NULL) 
+            area->check_client_stack(1);
         int t = luadbg_type(L, idx);
         switch (t) {
         case LUADBG_TNIL:
@@ -102,7 +103,8 @@ namespace luadebug::visitor {
             lua_pushlightuserdata(hL, luadbg_touserdata(L, idx));
             break;
         case LUADBG_TUSERDATA: {
-            area.check_client_stack(3);
+            if (area != NULL)
+                area->check_client_stack(3);
             refvalue::value* v = (refvalue::value*)luadbg_touserdata(L, idx);
             return refvalue::eval(v, hL);
         }
@@ -110,6 +112,9 @@ namespace luadebug::visitor {
             return LUADBG_TNONE;
         }
         return t;
+    }
+    static int copy_from_dbg(luadbg_State* L, lua_State* hL, protected_area& area, int idx) {
+        return copy_from_dbg(L, hL, &area, idx);
     }
 
     static bool copy_from_dbg(luadbg_State* L, lua_State* hL, protected_area& area, int idx, int type) {
@@ -122,6 +127,19 @@ namespace luadebug::visitor {
         }
         return false;
     }
+
+
+    bool copy_from_dbg_unprotected(luadbg_State* L, lua_State* hL, int idx, int type) {
+        int t = copy_from_dbg(L, hL, NULL, idx);
+        if (t == type) {
+            return true;
+        }
+        if (t != LUADBG_TNONE) {
+            lua_pop(hL, 1);
+        }
+        return false;
+    }
+
 
     static void copy_from_dbg_clonetable(luadbg_State* L, lua_State* hL, protected_area& area, int idx) {
         if (copy_from_dbg(L, hL, area, idx) == LUADBG_TNONE) {

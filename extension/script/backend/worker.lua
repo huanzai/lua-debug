@@ -819,19 +819,26 @@ function event.thread(co, type)
     hookmgr.updatehookmask(L)
 end
 
-function event.thread_created(ud)
-    local co = hookmgr.tothread(ud)
-    coroutinePool[co] = true
+function event.thread_created(co)
+    local L = hookmgr.gethost()
+    coroutinePool[co] = L
 end
 
 function event.update_thread_hook()
-    for co in pairs(coroutinePool) do 
-        if "dead" == coroutine.status(co) then 
+    local baseL = hookmgr.gethost()
+
+    for co, L in pairs(coroutinePool) do 
+        hookmgr.sethost(L)
+
+        local _,v = rdebug.value(co)
+        if "dead" == rdebug.costatus(v) then 
             coroutinePool[co] = nil
         else
             hookmgr.set_thread_hook(co)
         end
     end
+
+    hookmgr.sethost(baseL)
 end
 
 function event.wait()
