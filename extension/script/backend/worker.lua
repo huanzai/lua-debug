@@ -27,7 +27,7 @@ local outputCapture = {}
 local noDebug = false
 local autoUpdate = true
 local coroutineTree = {}
-local coroutinePool = {} -- 收集创建 coroutine
+local coroutineRefs = {} -- 收集创建 coroutine
 local stackFrame = {}
 local skipFrame = 0
 local baseL
@@ -820,25 +820,31 @@ function event.thread(co, type)
 end
 
 function event.thread_created(co)
-    local L = hookmgr.gethost()
-    coroutinePool[co] = L
+    -- co 是 dbgL 的一个 ud 值（ud: index，registry_type），在 c 中可以取到它的真实值。
+    -- co 是个临时值，本方法运行结束后，它的引用就会失效
+    -- 所以需要在本方法内对其真实值进行保存
+    -- 我的想法是，在 c 中对其进行解引用，取到真实值(thread)，然后保存在 LUA_REGISTRYINDEX 全局表中，并返回 ref 引用值: registry[ref] = thread
+    -- 最后在 dbgL 的 lua 层（也就是本文件）记录 ref 
+    -- 在 update_thread_hook 中判断是否需要对其解引用 lua_unref
+
+    local ref = rdebug.refco(co)
+    table.insert(coroutineRefs, ref)
 end
 
 function event.update_thread_hook()
-    local baseL = hookmgr.gethost()
-
-    for co, L in pairs(coroutinePool) do 
-        hookmgr.sethost(L)
-
-        local _,v = rdebug.value(co)
-        if "dead" == rdebug.costatus(v) then 
-            coroutinePool[co] = nil
+    local deads = {}
+    for i, ref in pairs(coroutineRefs) do 
+        if "dead" == rdebug.costatus(ref) then 
+            table.insert(deads, i)
         else
-            hookmgr.set_thread_hook(co)
+            hookmgr.set_thread_hook(ref)
         end
     end
 
-    hookmgr.sethost(baseL)
+    for i=#deads,1,-1 do 
+        local ref = table.remove(coroutineRefs, i)
+        rdebug.unrefco(ref);
+    end
 end
 
 function event.wait()

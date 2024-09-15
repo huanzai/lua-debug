@@ -715,13 +715,20 @@ static int update_open(luadbg_State* L) {
 
 static int set_thread_hook(luadbg_State* L) {
     lua_State* hL = luadebug::debughost::get(L);
-    if (!luadebug::visitor::copy_from_dbg_unprotected(L, hL, 1, LUADBG_TTHREAD)) {
+
+    luadbg_Integer ref = luadbgL_checkinteger(L, 1);
+
+    lua_pushvalue(hL, LUA_REGISTRYINDEX);
+    lua_rawgeti(hL, -1, (int)ref);
+    if (lua_type(hL, -1) != LUA_TTHREAD) {
+        lua_pop(hL, 2);
         return 0;
     }
 
     lua_State* thread = lua_tothread(hL, -1);
+    lua_pop(hL, 2);
+
     hookmgr::get_self(L)->set_thread_hook(thread);
-    lua_pop(hL, 1);
     return 0;
 }
 

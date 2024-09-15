@@ -1017,13 +1017,61 @@ namespace luadebug::visitor {
 
     static int visitor_costatus(luadbg_State* L, lua_State* hL, protected_area& area) {
         if (!copy_from_dbg(L, hL, area, 1, LUADBG_TTHREAD)) {
-            luadbg_pushstring(L, "invalid");
-            return 1;
+            // 可能传进来的是 ref 
+            if (!copy_from_dbg(L, hL, area, 1, LUADBG_TNUMBER)) {
+				luadbg_pushstring(L, "invalid");
+				return 1;
+            }
+            
+            // 检查 LUA_REGISTRYINDEX 中 ref 的值是否存在，以及是否是 LUA_TTHREAD
+            int ref = lua_tointeger(hL, -1);
+            lua_pop(hL, 1); 
+
+            lua_pushvalue(hL, LUA_REGISTRYINDEX);
+            lua_rawgeti(hL, -1, ref);
+            lua_replace(hL, -2);
+            if (lua_type(hL, -1) != LUA_TTHREAD) {
+                lua_pop(hL, 1);     
+                luadbg_pushstring(L, "invalid");
+                return 1;
+            }
         }
         const char* s = costatus(hL, lua_tothread(hL, -1));
         lua_pop(hL, 1);
         luadbg_pushstring(L, s);
         return 1;
+    }
+
+    static int visitor_refco(luadbg_State* L, lua_State* hL, protected_area& area) {
+        if (!copy_from_dbg(L, hL, area, 1, LUADBG_TTHREAD)) {
+            luadbg_pushinteger(L, LUA_REFNIL);
+            return 1;
+        }
+        lua_State* thread = lua_tothread(hL, -1);
+
+        // 注册到 LUA_REGISTRYINDEX
+        lua_pushvalue(hL, LUA_REGISTRYINDEX);
+        lua_insert(hL, -2);
+        lua_Integer ref = luaL_ref(hL, -2);
+        lua_pop(hL, 1);
+
+        luadbg_pushinteger(L, (luadbg_Integer)ref);
+        return 1;
+    }
+
+    static int visitor_unrefco(luadbg_State* L, lua_State* hL, protected_area& area) {
+        luadbg_Integer ref = luadbgL_checkinteger(L, 1);
+        
+        lua_pushvalue(hL, LUA_REGISTRYINDEX);
+        lua_rawgeti(hL, -1, (lua_Integer)ref);
+        if (lua_type(hL, -1) != LUA_TTHREAD) {
+            lua_pop(hL, 2);
+            return 0;
+        }
+        luaL_unref(hL, -2, ref);
+        lua_pop(hL, 2);
+
+        return 0;
     }
 
     static int visitor_gccount(luadbg_State* L, lua_State* hL, protected_area& area) {
@@ -1095,6 +1143,8 @@ namespace luadebug::visitor {
             { "watch", protected_call<visitor_watch> },
             { "cleanwatch", protected_call<visitor_cleanwatch> },
             { "costatus", protected_call<visitor_costatus> },
+            { "refco", protected_call<visitor_refco> },
+            { "unrefco", protected_call<visitor_unrefco> },
             { "gccount", protected_call<visitor_gccount> },
             { "cfunctioninfo", protected_call<visitor_cfunctioninfo> },
             { NULL, NULL },
