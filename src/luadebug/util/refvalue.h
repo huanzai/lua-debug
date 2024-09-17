@@ -22,6 +22,8 @@ namespace luadebug::refvalue {
         REGISTRY,
         DEBUG_REF,
         DEBUG_WATCH,
+        CO_CREATE,
+        CO_STACK,
     };
     struct REGISTRY {
         REGISTRY_TYPE type;

@@ -4,6 +4,7 @@ local function _do()
     local b = 2
 
     local c = a+b
+    c = 9
     return c + 10
 end
 

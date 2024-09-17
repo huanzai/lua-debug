@@ -11,6 +11,7 @@
 #include "rdebug_eventfree.h"
 #include "rdebug_lua.h"
 #include "thunk/thunk.h"
+#include "util/refvalue.h"
 
 #if LUA_VERSION_NUM >= 502
 #    include <lstate.h>
@@ -72,7 +73,7 @@ static void push_callback(luadbg_State* L) {
 namespace luadebug::visitor {
     int copy_to_dbg_ref(lua_State* hL, luadbg_State* L);
     void registry_unref(lua_State* hL, int ref);
-    bool copy_from_dbg_unprotected(luadbg_State* L, lua_State* hL, int idx, int type);
+    void registry_table(lua_State*, luadebug::refvalue::REGISTRY_TYPE);
 }
 
 #define LOG(...)                         \
@@ -718,7 +719,7 @@ static int set_thread_hook(luadbg_State* L) {
 
     luadbg_Integer ref = luadbgL_checkinteger(L, 1);
 
-    lua_pushvalue(hL, LUA_REGISTRYINDEX);
+    luadebug::visitor::registry_table(hL, luadebug::refvalue::REGISTRY_TYPE::CO_CREATE);
     lua_rawgeti(hL, -1, (int)ref);
     if (lua_type(hL, -1) != LUA_TTHREAD) {
         lua_pop(hL, 2);

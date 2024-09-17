@@ -160,7 +160,7 @@ namespace luadebug::visitor {
         }
     }
 
-    static void registry_table(lua_State* hL, refvalue::REGISTRY_TYPE type) {
+    void registry_table(lua_State* hL, refvalue::REGISTRY_TYPE type) {
         switch (type) {
         case refvalue::REGISTRY_TYPE::REGISTRY:
             lua_pushvalue(hL, LUA_REGISTRYINDEX);
@@ -179,6 +179,22 @@ namespace luadebug::visitor {
                 lua_newtable(hL);
                 lua_pushvalue(hL, -1);
                 lua_setfield(hL, LUA_REGISTRYINDEX, "__debugger_watch");
+            }
+            break;
+        case refvalue::REGISTRY_TYPE::CO_CREATE:
+            if (lua::getfield(hL, LUA_REGISTRYINDEX, "__debugger_cocreate") == LUA_TNIL) {
+                lua_pop(hL, 1);
+                lua_newtable(hL);
+                lua_pushvalue(hL, -1);
+                lua_setfield(hL, LUA_REGISTRYINDEX, "__debugger_cocreate");
+            }
+            break;
+        case refvalue::REGISTRY_TYPE::CO_STACK:
+            if (lua::getfield(hL, LUA_REGISTRYINDEX, "__debugger_costack") == LUA_TNIL) {
+                lua_pop(hL, 1);
+                lua_newtable(hL);
+                lua_pushvalue(hL, -1);
+                lua_setfield(hL, LUA_REGISTRYINDEX, "__debugger_costack");
             }
             break;
         default:
@@ -1017,6 +1033,12 @@ namespace luadebug::visitor {
 
     static int visitor_costatus(luadbg_State* L, lua_State* hL, protected_area& area) {
         if (!copy_from_dbg(L, hL, area, 1, LUADBG_TTHREAD)) {
+            int nL = luadbg_gettop(L);
+            if (nL < 2) {
+                luadbg_pushstring(L, "invalid");
+                return 1;
+            }
+
             // 可能传进来的是 ref 
             if (!copy_from_dbg(L, hL, area, 1, LUADBG_TNUMBER)) {
 				luadbg_pushstring(L, "invalid");
@@ -1024,10 +1046,16 @@ namespace luadebug::visitor {
             }
             
             // 检查 LUA_REGISTRYINDEX 中 ref 的值是否存在，以及是否是 LUA_TTHREAD
-            int ref = lua_tointeger(hL, -1);
+            int ref = (int)lua_tointeger(hL, -1);
             lua_pop(hL, 1); 
 
-            lua_pushvalue(hL, LUA_REGISTRYINDEX);
+            int co_type = (int)luadbgL_checkinteger(L, 2);
+            if (co_type == 0) {
+                registry_table(hL, refvalue::REGISTRY_TYPE::CO_CREATE);
+            } else {
+                registry_table(hL, refvalue::REGISTRY_TYPE::CO_STACK);
+            }
+
             lua_rawgeti(hL, -1, ref);
             lua_replace(hL, -2);
             if (lua_type(hL, -1) != LUA_TTHREAD) {
@@ -1043,17 +1071,44 @@ namespace luadebug::visitor {
     }
 
     static int visitor_refco(luadbg_State* L, lua_State* hL, protected_area& area) {
-        if (!copy_from_dbg(L, hL, area, 1, LUADBG_TTHREAD)) {
-            luadbg_pushinteger(L, LUA_REFNIL);
-            return 1;
-        }
-        lua_State* thread = lua_tothread(hL, -1);
+        int nL = luadbg_gettop(L);
+        int nhL = lua_gettop(hL);
 
-        // 注册到 LUA_REGISTRYINDEX
-        lua_pushvalue(hL, LUA_REGISTRYINDEX);
-        lua_insert(hL, -2);
-        lua_Integer ref = luaL_ref(hL, -2);
-        lua_pop(hL, 1);
+        luadbg_Integer co_type = luadbgL_checkinteger(L, 2);
+        if (!copy_from_dbg(L, hL, area, 1, LUADBG_TTHREAD)) {
+            // 可能传进来的是 lua_State*
+            if (!copy_from_dbg(L, hL, area, 1, LUADBG_TLIGHTUSERDATA)) {
+                luadbg_pushinteger(L, LUA_REFNIL);
+                return 1;
+            }
+        }
+
+        if (co_type == 0) {
+            registry_table(hL, refvalue::REGISTRY_TYPE::CO_CREATE);
+        } else {
+            registry_table(hL, refvalue::REGISTRY_TYPE::CO_STACK);
+        }
+
+        // thread 是否已存在
+        int ref = LUA_REFNIL;
+        lua_pushvalue(hL, -2);          
+        lua_gettable(hL, -2);           // push t[thread]
+        if (lua_isnil(hL, -1)) {
+            lua_pop(hL, 1);             // pop nil
+
+            // 设置 t[ref] = thread
+            lua_pushvalue(hL, -2);      // push thread
+            ref = luaL_ref(hL, -2);     
+
+            // 设置 t[thread] = ref
+            lua_pushvalue(hL, -2);      // push thread 
+            lua_pushinteger(hL, ref);
+            lua_settable(hL, -3);       // t[thread] = ref
+        } else {
+            ref = (int)lua_tointeger(hL, -1);
+        }
+        lua_settop(hL, nhL);
+        luadbg_settop(L, nL);
 
         luadbg_pushinteger(L, (luadbg_Integer)ref);
         return 1;
@@ -1061,17 +1116,56 @@ namespace luadebug::visitor {
 
     static int visitor_unrefco(luadbg_State* L, lua_State* hL, protected_area& area) {
         luadbg_Integer ref = luadbgL_checkinteger(L, 1);
+        luadbg_Integer co_type = luadbgL_checkinteger(L, 2);
+
+        int nhL = lua_gettop(hL);
+
+        if (co_type == 0) {
+            registry_table(hL, refvalue::REGISTRY_TYPE::CO_CREATE);
+        } else {
+            registry_table(hL, refvalue::REGISTRY_TYPE::CO_STACK);
+        }
         
-        lua_pushvalue(hL, LUA_REGISTRYINDEX);
         lua_rawgeti(hL, -1, (lua_Integer)ref);
         if (lua_type(hL, -1) != LUA_TTHREAD) {
             lua_pop(hL, 2);
             return 0;
         }
-        luaL_unref(hL, -2, ref);
-        lua_pop(hL, 2);
 
+        // remove t[ref]
+        luaL_unref(hL, -2, (int)ref);
+
+        // t[thread] = nil
+        lua_pushnil(hL);
+        lua_settable(hL, -3);
+
+        lua_settop(hL, nhL);
         return 0;
+    }
+
+    static int visitor_getco(luadbg_State* L, lua_State* hL, protected_area& area) {
+        luadbg_Integer ref     = luadbgL_checkinteger(L, 1);
+        luadbg_Integer co_type = luadbgL_checkinteger(L, 2);
+
+        int nL = luadbg_gettop(L);
+        int nhL = lua_gettop(hL);
+
+        if (co_type == 0) {
+            registry_table(hL, refvalue::REGISTRY_TYPE::CO_CREATE);
+        } else {
+            registry_table(hL, refvalue::REGISTRY_TYPE::CO_STACK);
+        }
+
+        lua_rawgeti(hL, -1, (lua_Integer)ref);
+        if (lua_type(hL, -1) != LUA_TTHREAD) {
+            lua_settop(hL, nhL);
+            luadbg_pushnil(L);
+            return 1;
+        }
+
+        luadbg_pushlightuserdata(L, lua_tothread(hL, -1));
+        lua_settop(hL, nhL);
+        return 1;
     }
 
     static int visitor_gccount(luadbg_State* L, lua_State* hL, protected_area& area) {
@@ -1145,6 +1239,7 @@ namespace luadebug::visitor {
             { "costatus", protected_call<visitor_costatus> },
             { "refco", protected_call<visitor_refco> },
             { "unrefco", protected_call<visitor_unrefco> },
+            { "getco", protected_call<visitor_getco> },
             { "gccount", protected_call<visitor_gccount> },
             { "cfunctioninfo", protected_call<visitor_cfunctioninfo> },
             { NULL, NULL },

@@ -32,6 +32,11 @@ local stackFrame = {}
 local skipFrame = 0
 local baseL
 
+local CO_TYPE = {
+    CREATE = 0,
+    STACK = 1,
+}
+
 local CMD = {}
 
 local WorkerIdent = tostring(thread.id)
@@ -227,10 +232,16 @@ local function skipCFunction(res)
 end
 
 local function coroutineFrom(L)
+    local ref = rdebug.refco(L, CO_TYPE.STACK)
+    local fromRef = coroutineTree[ref]
     if hookmgr.coroutine_from then
-        return coroutineTree[L] or hookmgr.coroutine_from(L)
+        fromRef = coroutineTree[ref] or hookmgr.coroutine_from(L) -- TODO hookmgr.coroutine_from(ref) 暂未实现
     end
-    return coroutineTree[L]
+    if not fromRef then 
+        return
+    end
+
+    return rdebug.getco(fromRef, CO_TYPE.STACK)
 end
 
 local function nextTotalFrames(finish, n)
@@ -806,17 +817,44 @@ function event.exception(errobj, errcode, level)
     runException(getExceptionFlags(errcode, skip), errobj)
 end
 
+
 function event.thread(co, type)
     if not debuggeeReady() then return end
+
+--[[
     local L = hookmgr.gethost()
     if co then
         if type == 0 then
-            coroutineTree[L] = co
+            -- coroutineTree[L] = co -- 这里应该写反了，纠正一下
+            coroutineTree[co] = L
         elseif type == 1 then
             coroutineTree[co] = nil
         end
     end
     hookmgr.updatehookmask(L)
+--]]
+
+    
+    -- 这里的 co 是 dbgL 创建的一个 ud(ud:index, registry_type)，它是个临时值
+    -- 即：运行完此方法，co 就无效了（指向的 index 无效了）
+    -- 所以这里有 bug，应该采取 thread_created 的办法进行保存
+    -- 其中 L 也需要做保存，可以使用 refco 同时做兼容（TODO refco 改个合适的名字）
+    -- 这里的 refco 跟 thread_created 这边不一样，所以要区分开。
+    -- 而且同一个 thread 可能会触发多次 refco，因此需要排重。
+
+    local L = hookmgr.gethost()
+    local refL = rdebug.refco(L, CO_TYPE.STACK)
+    if co then 
+        local ref = rdebug.refco(co, CO_TYPE.STACK)
+        if type == 0 then 
+            coroutineTree[ref] = refL
+        elseif type == 1 then 
+            coroutineTree[ref] = nil
+
+            rdebug.unrefco(ref, CO_TYPE.STACK)
+            rdebug.unrefco(refL, CO_TYPE.STACK)
+        end
+    end
 end
 
 function event.thread_created(co)
@@ -827,14 +865,14 @@ function event.thread_created(co)
     -- 最后在 dbgL 的 lua 层（也就是本文件）记录 ref 
     -- 在 update_thread_hook 中判断是否需要对其解引用 lua_unref
 
-    local ref = rdebug.refco(co)
+    local ref = rdebug.refco(co, CO_TYPE.CREATE)
     table.insert(coroutineRefs, ref)
 end
 
 function event.update_thread_hook()
     local deads = {}
     for i, ref in pairs(coroutineRefs) do 
-        if "dead" == rdebug.costatus(ref) then 
+        if "dead" == rdebug.costatus(ref, CO_TYPE.CREATE) then 
             table.insert(deads, i)
         else
             hookmgr.set_thread_hook(ref)
@@ -843,7 +881,7 @@ function event.update_thread_hook()
 
     for i=#deads,1,-1 do 
         local ref = table.remove(coroutineRefs, i)
-        rdebug.unrefco(ref);
+        rdebug.unrefco(ref, CO_TYPE.CREATE)
     end
 end
 
