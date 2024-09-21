@@ -880,7 +880,7 @@ function event.update_thread_hook()
     end
 
     for i=#deads,1,-1 do 
-        local ref = table.remove(coroutineRefs, i)
+        local ref = table.remove(coroutineRefs, deads[i])
         rdebug.unrefco(ref, CO_TYPE.CREATE)
     end
 end
