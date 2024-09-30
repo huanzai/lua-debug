@@ -166,6 +166,16 @@ local function isValidPath(path)
     return not (prefix and #prefix > 1)
 end
 
+local function readFile(path)
+    local f = io.open(path, "r")
+    if not f then 
+        return 
+    end
+    local content = f:read("*a")
+    f:close()
+    return content
+end
+
 function request.setBreakpoints(req)
     local args = req.arguments
     local invalidPath = args.source.path and not isValidPath(args.source.path)
@@ -175,6 +185,10 @@ function request.setBreakpoints(req)
         bp.message = invalidPath
             and ("Does not support path: `%s`"):format(args.source.path)
             or "Wait verify. (The source file is not loaded.)"
+        bp.column = jsonvalue(bp.column)
+        bp.condition = jsonvalue(bp.condition)
+        bp.hitCondition = jsonvalue(bp.hitCondition)
+        bp.logMessage = jsonvalue(bp.logMessage)
     end
     response.success(req, {
         breakpoints = args.breakpoints
@@ -183,6 +197,9 @@ function request.setBreakpoints(req)
         return
     end
     local content = skipBOM(args.sourceContent)
+    if not content then 
+        content = readFile(args.source.path) -- TODO 读取本地，此操作将使其不支持 remote debug，后续待完善
+    end
     if args.source.sourceReference then
         local sourceReference = args.source.sourceReference
         local w = sourceReference >> 32
@@ -243,7 +260,7 @@ function request.setExceptionBreakpoints(req)
         filter[#filter + 1] = {
             id = id,
             filterId = opt.filterId,
-            condition = opt.condition,
+            condition = jsonvalue(opt.condition),
         }
     end
     for _, filterId in ipairs(args.filters) do
