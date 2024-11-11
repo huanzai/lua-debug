@@ -163,6 +163,10 @@ function m.create(source)
     return newSource
 end
 
+function m.remove(source)
+    sourcePool[source] = nil
+end
+
 function m.c2s(clientsrc)
     -- TODO: 不遍历？
     if clientsrc.sourceReference then

@@ -681,6 +681,11 @@ function event.newproto(proto, level)
     return breakpoint.newproto(proto, src, info.linedefined.."-"..info.lastlinedefined)
 end
 
+function event.invalidSource(sourcePath)
+    if not debuggeeReady() then return end
+    source.remove(sourcePath)
+end
+
 function event.update()
     debuggeeReady()
     workerThreadUpdate()
