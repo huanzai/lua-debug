@@ -1,3 +1,8 @@
+# 目标
+
+支持随时开启 debugger，而非在启动时开启（修复了后创建协程无法断点问题）
+
+
 # lua-debug
 
 [![Build Status](https://github.com/actboy168/lua-debug/workflows/build/badge.svg)](https://github.com/actboy168/lua-debug/actions?workflow=build)
