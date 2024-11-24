@@ -15,7 +15,25 @@ local function searchDebugger(luaDebugs, tag)
     end
 end
 
+local function searchDebuggerForSublime()
+    local isWindows = package.config:sub(1,1) == "\\"
+    local extensionPath = (isWindows and os.getenv "LOCALAPPDATA" or os.getenv "HOME") .. "/Sublime Text/Package Storage/Debugger"
+    local command = isWindows and ("dir /B \"" .. extensionPath:gsub("/", "\\") .. "\" 2>nul") or ("ls -1 " .. extensionPath .. " 2>/dev/null")
+    for name in io.popen(command):lines() do
+        if name == "lua" then 
+            return extensionPath .. "/" .. name
+        end
+    end
+end
+
 local function getLatestDebugger()
+    -- lua-debug for sublime
+    local path = searchDebuggerForSublime()
+    if path then 
+        return path
+    end
+
+    -- lua-debug for vscode
     local luaDebugs = {}
     searchDebugger(luaDebugs, "")
     searchDebugger(luaDebugs, "-server")
