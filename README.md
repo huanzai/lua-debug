@@ -1,7 +1,7 @@
 # 目标
 
-支持随时开启 debugger，而非在启动时开启（修复了后创建协程无法断点问题）
-
++ 支持随时开启 debugger，而非在启动时开启（修复了后创建协程无法断点问题）
++ 支持 Sublime ，见 [SublimeDebugger](https://github.com/huanzai/SublimeDebugger)
 
 # lua-debug
 
